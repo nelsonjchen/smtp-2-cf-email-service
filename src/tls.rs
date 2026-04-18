@@ -1,24 +1,19 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
-
 use anyhow::{Context, Result, anyhow, bail};
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use tokio_rustls::TlsAcceptor;
 
 use crate::config::ResolvedTls;
 
-pub fn load_acceptor(resolved: &ResolvedTls) -> Result<TlsAcceptor> {
+pub fn load_server_config(resolved: &ResolvedTls) -> Result<ServerConfig> {
     let certs = load_certs(&resolved.fullchain_path)?;
     let key = load_private_key(&resolved.privkey_path)?;
 
-    let config = ServerConfig::builder()
+    ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .context("failed to build rustls server config")?;
-
-    Ok(TlsAcceptor::from(Arc::new(config)))
+        .context("failed to build rustls server config")
 }
 
 fn load_certs(path: &std::path::Path) -> Result<Vec<CertificateDer<'static>>> {
