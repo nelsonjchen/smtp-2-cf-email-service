@@ -81,7 +81,11 @@ pub async fn run_servers(prepared: PreparedConfig, queue: QueueStore) -> Result<
             ServerKind::Submission587,
             tls_config.clone(),
         ));
-        join_set.spawn(start_smtpd_server(runtime, ServerKind::Smtps465, tls_config));
+        join_set.spawn(start_smtpd_server(
+            runtime,
+            ServerKind::Smtps465,
+            tls_config,
+        ));
     }
 
     while let Some(result) = join_set.join_next().await {
@@ -189,7 +193,8 @@ impl SmtpHandler for Handler {
             return Err(Error::Response(response));
         }
 
-        if let Err(err) = ensure_header_from_allowed(&self.runtime.config.senders.allowed_domains, &data)
+        if let Err(err) =
+            ensure_header_from_allowed(&self.runtime.config.senders.allowed_domains, &data)
         {
             return Err(Error::Response(Response::new(
                 553,

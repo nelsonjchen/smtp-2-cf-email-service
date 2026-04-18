@@ -161,6 +161,7 @@ The sample unit uses:
 - `check-config` reports TLS material found
 - listeners start on `25`, `587`, and `465`
 - Gmail can authenticate and send through `465` or `587`
+- the process polls the active cert/key files and restarts itself when Certbot replaces them
 
 ### First boot with no certs present
 
@@ -180,7 +181,7 @@ This is a submission relay, not a full public MX:
 
 - no inbound filtering pipeline
 - no DKIM signing
-- no live cert reload
+- no zero-downtime live cert swap; the process restarts itself when cert files change
 - no Docker packaging
 - no account database
 

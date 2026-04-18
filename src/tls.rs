@@ -1,8 +1,8 @@
-use std::fs::File;
-use std::io::BufReader;
 use anyhow::{Context, Result, anyhow, bail};
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use std::fs::File;
+use std::io::BufReader;
 
 use crate::config::ResolvedTls;
 

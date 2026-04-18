@@ -1,6 +1,7 @@
 pub mod cloudflare;
 pub mod config;
 pub mod queue;
+pub mod reload;
 pub mod smtp_server;
 pub mod tls;
 
@@ -12,6 +13,7 @@ use tracing::info;
 use crate::cloudflare::CloudflareClient;
 use crate::config::{PreparedConfig, prepare_config};
 use crate::queue::QueueStore;
+use crate::reload::spawn_cert_reload_watcher;
 
 pub async fn run_check_config(path: &Path) -> Result<()> {
     let prepared = prepare_config(path)?;
@@ -28,6 +30,10 @@ pub async fn run_serve(path: &Path) -> Result<()> {
         prepared.config.cloudflare.account_id.clone(),
         prepared.secrets.cloudflare_api_token.clone(),
     )?;
+
+    if let Some(tls) = prepared.tls.clone() {
+        spawn_cert_reload_watcher(tls);
+    }
 
     queue.spawn_delivery_worker(client);
     smtp_server::run_servers(prepared, queue).await
