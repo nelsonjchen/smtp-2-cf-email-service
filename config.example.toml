@@ -1,0 +1,32 @@
+hostname = "smtp.example.com"
+appname = "smtp2cf"
+max_message_size = 26214400
+max_recipients = 50
+command_timeout_secs = 300
+
+[ports]
+smtp_25 = "0.0.0.0:25"
+submission_587 = "0.0.0.0:587"
+smtps_465 = "0.0.0.0:465"
+
+[auth]
+username = "relay@example.com"
+
+[senders]
+allowed_domains = ["example.com", "mail.example.com"]
+
+[cloudflare]
+account_id = "your-cloudflare-account-id"
+
+[tls]
+cert_name = "mail.example.com"
+# fullchain_path = "/etc/letsencrypt/live/mail.example.com/fullchain.pem"
+# privkey_path = "/etc/letsencrypt/live/mail.example.com/privkey.pem"
+allow_insecure_auth = false
+
+[queue]
+spool_dir = "/var/lib/smtp2cf/spool"
+max_attempts = 10
+backoff_initial_secs = 30
+backoff_max_secs = 3600
+poll_interval_secs = 5

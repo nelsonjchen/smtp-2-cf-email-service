@@ -1,0 +1,21 @@
+[Unit]
+Description=smtp2cf SMTP to Cloudflare relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smtp2cf
+Group=smtp2cf
+ExecStart=/usr/local/bin/smtp2cf serve --config /etc/smtp2cf/config.toml
+EnvironmentFile=/etc/smtp2cf/smtp2cf.env
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+StateDirectory=smtp2cf
+WorkingDirectory=/var/lib/smtp2cf
+
+[Install]
+WantedBy=multi-user.target
