@@ -104,12 +104,141 @@ impl CloudflareClient {
 }
 
 pub(crate) fn build_send_raw_request(envelope: &QueueEnvelope) -> Result<SendRawRequest> {
+    let sanitized = sanitize_raw_mime_for_cloudflare(&envelope.raw_mime()?)?;
+
     Ok(SendRawRequest {
         from: envelope.envelope_from.clone(),
         recipients: envelope.recipients.clone(),
-        mime_message: String::from_utf8(envelope.raw_mime()?)
+        mime_message: String::from_utf8(sanitized)
             .map_err(|_| anyhow!("raw MIME message is not valid UTF-8"))?,
     })
+}
+
+fn sanitize_raw_mime_for_cloudflare(raw: &[u8]) -> Result<Vec<u8>> {
+    let Some((header_bytes, body_bytes)) = split_headers_and_body(raw) else {
+        return Err(anyhow!("raw MIME message is missing header/body separator"));
+    };
+
+    let header_blocks = parse_header_blocks(header_bytes)?;
+    let mut sanitized = Vec::with_capacity(raw.len());
+
+    for block in header_blocks {
+        let name = header_name(&block)?;
+        if should_strip_header(name) {
+            continue;
+        }
+
+        for line in block {
+            sanitized.extend_from_slice(&line);
+            sanitized.extend_from_slice(b"\r\n");
+        }
+    }
+
+    sanitized.extend_from_slice(b"\r\n");
+    sanitized.extend_from_slice(body_bytes);
+    Ok(sanitized)
+}
+
+fn split_headers_and_body(raw: &[u8]) -> Option<(&[u8], &[u8])> {
+    if let Some(index) = raw.windows(4).position(|window| window == b"\r\n\r\n") {
+        return Some((&raw[..index], &raw[index + 4..]));
+    }
+
+    raw.windows(2)
+        .position(|window| window == b"\n\n")
+        .map(|index| (&raw[..index], &raw[index + 2..]))
+}
+
+fn parse_header_blocks(header_bytes: &[u8]) -> Result<Vec<Vec<Vec<u8>>>> {
+    let mut blocks: Vec<Vec<Vec<u8>>> = Vec::new();
+    let mut current: Option<Vec<Vec<u8>>> = None;
+
+    for line in split_header_lines(header_bytes) {
+        if line.is_empty() {
+            continue;
+        }
+
+        if matches!(line.first(), Some(b' ' | b'\t')) {
+            let current = current
+                .as_mut()
+                .ok_or_else(|| anyhow!("encountered folded header without a preceding header"))?;
+            current.push(line.to_vec());
+            continue;
+        }
+
+        if let Some(block) = current.take() {
+            blocks.push(block);
+        }
+        current = Some(vec![line.to_vec()]);
+    }
+
+    if let Some(block) = current {
+        blocks.push(block);
+    }
+
+    Ok(blocks)
+}
+
+fn split_header_lines(header_bytes: &[u8]) -> Vec<&[u8]> {
+    let mut lines = Vec::new();
+    let mut start = 0usize;
+    let mut index = 0usize;
+
+    while index < header_bytes.len() {
+        match header_bytes[index] {
+            b'\r' if header_bytes.get(index + 1) == Some(&b'\n') => {
+                lines.push(&header_bytes[start..index]);
+                index += 2;
+                start = index;
+            }
+            b'\n' => {
+                lines.push(&header_bytes[start..index]);
+                index += 1;
+                start = index;
+            }
+            _ => {
+                index += 1;
+            }
+        }
+    }
+
+    if start < header_bytes.len() {
+        lines.push(&header_bytes[start..]);
+    }
+
+    lines
+}
+
+fn header_name(block: &[Vec<u8>]) -> Result<&str> {
+    let first_line = block
+        .first()
+        .ok_or_else(|| anyhow!("header block unexpectedly empty"))?;
+    let colon = first_line
+        .iter()
+        .position(|byte| *byte == b':')
+        .ok_or_else(|| anyhow!("header is missing ':' separator"))?;
+    std::str::from_utf8(&first_line[..colon])
+        .map(str::trim)
+        .map_err(|_| anyhow!("header name is not valid UTF-8"))
+}
+
+fn should_strip_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "arc-authentication-results"
+            | "arc-message-signature"
+            | "arc-seal"
+            | "authentication-results"
+            | "bcc"
+            | "delivered-to"
+            | "dkim-signature"
+            | "received"
+            | "return-path"
+            | "x-gm-features"
+            | "x-gm-message-state"
+            | "x-gmail-original-message-id"
+            | "x-received"
+    )
 }
 
 fn format_api_errors(errors: &[ApiError]) -> String {
@@ -156,5 +285,55 @@ mod tests {
         assert_eq!(request.from, "sender@example.com");
         assert_eq!(request.recipients, vec!["to@example.net"]);
         assert!(request.mime_message.contains("From: sender@example.com"));
+    }
+
+    #[test]
+    fn sanitizes_folded_transport_headers_without_touching_body() {
+        let raw = concat!(
+            "Received: by mail-lj1-f178.google.com with SMTP id abc\r\n",
+            "        for <to@example.net>; Sat, 18 Apr 2026 19:49:14 -0700 (PDT)\r\n",
+            "X-Gm-Message-State: AOJu0Ywg+MlHIHpr4MNBgUQFai0/7mYelgJzkuhyS13gzHMof12XwuwL\r\n",
+            "\tWLJfU/V1dFob7vG4+mQ1hjcXELn49hoHf2y8QKkEuwbf5vm+MyEpVaYnSLyFNA2CzQoawEB1bqU\r\n",
+            "From: Sender Example <sender@example.com>\r\n",
+            "To: recipient@example.net\r\n",
+            "Subject: test 123\r\n",
+            "MIME-Version: 1.0\r\n",
+            "Content-Type: multipart/alternative; boundary=\"b\"\r\n",
+            "\r\n",
+            "--b\r\n",
+            "Content-Type: text/plain; charset=\"UTF-8\"\r\n",
+            "\r\n",
+            "\r\n",
+            "--b\r\n",
+            "Content-Type: text/html; charset=\"UTF-8\"\r\n",
+            "\r\n",
+            "<div dir=\"ltr\"><br></div>\r\n",
+            "--b--\r\n"
+        )
+        .as_bytes();
+
+        let sanitized = String::from_utf8(sanitize_raw_mime_for_cloudflare(raw).unwrap()).unwrap();
+        assert!(!sanitized.contains("Received: by mail-lj1-f178.google.com"));
+        assert!(!sanitized.contains("X-Gm-Message-State:"));
+        assert!(sanitized.contains("From: Sender Example <sender@example.com>"));
+        assert!(sanitized.contains("<div dir=\"ltr\"><br></div>"));
+    }
+
+    #[test]
+    fn strips_bcc_before_forwarding() {
+        let raw = concat!(
+            "From: sender@example.com\r\n",
+            "To: visible@example.net\r\n",
+            "Bcc: hidden@example.net\r\n",
+            "Subject: hi\r\n",
+            "\r\n",
+            "hello\r\n"
+        )
+        .as_bytes();
+
+        let sanitized = String::from_utf8(sanitize_raw_mime_for_cloudflare(raw).unwrap()).unwrap();
+        assert!(!sanitized.contains("Bcc: hidden@example.net"));
+        assert!(sanitized.contains("To: visible@example.net"));
+        assert!(sanitized.ends_with("\r\n\r\nhello\r\n"));
     }
 }
