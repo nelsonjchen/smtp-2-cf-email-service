@@ -2,6 +2,8 @@
 
 Small Rust SMTP submission relay for low-RAM VPSes. It accepts authenticated SMTP, durably spools raw MIME messages to disk, and forwards them to [Cloudflare Email Service](https://developers.cloudflare.com/email-service/get-started/send-emails/) using the raw MIME API.
 
+Release history lives in [`CHANGELOG.md`](./CHANGELOG.md).
+
 This project is designed for:
 
 - Gmail "Send mail as" and similar SMTP clients
