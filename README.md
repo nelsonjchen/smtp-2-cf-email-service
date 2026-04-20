@@ -45,7 +45,7 @@ We use:
 
 ## Configuration
 
-Non-secret config lives in `config.toml`. A complete example is in [config.example.toml](./config.example.toml).
+Non-secret config lives in `config.toml`. A complete example is in [`config.example.toml`](./config.example.toml).
 
 Secrets come from the environment:
 
@@ -125,20 +125,23 @@ export SMTP2CF_CLOUDFLARE_API_TOKEN='replace-me'
 cargo run -- serve --config ./config.example.toml
 ```
 
-## Build For Old Ubuntu
+## Build For Deployment
 
-The runtime target is an old Ubuntu 20 VPS, so prefer a static `musl` build:
+Prefer building on a local machine inside a Linux `amd64` Docker container, then copying only the resulting binary to the server:
 
 ```bash
-rustup target add x86_64-unknown-linux-musl
-cargo build --release --target x86_64-unknown-linux-musl
+docker run --rm --platform linux/amd64 \
+  -v "$PWD":/work \
+  -w /work \
+  rust:1 \
+  bash -lc 'export PATH=/usr/local/cargo/bin:$PATH; cargo build --release'
 ```
 
-This keeps deployment simple and avoids surprises from old system libraries.
+This avoids slow builds on tiny VPSes and produces a Linux binary in an environment closer to the deployment target.
 
 ## systemd
 
-An example unit lives at [systemd/smtp2cf.service](./systemd/smtp2cf.service).
+An example unit lives at [`systemd/smtp2cf.service`](./systemd/smtp2cf.service).
 
 Suggested layout on the server:
 

@@ -1,4 +1,5 @@
 /target
 /.env
+/AGENTS.local.md
 *.log
 *.tmp

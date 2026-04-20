@@ -1,0 +1,28 @@
+# AGENTS.local.md.example
+
+This file is an example for private, machine-specific operator notes.
+
+- Copy this file to `AGENTS.local.md` if you want local deployment guidance that stays out of Git.
+- Do not store secrets here.
+- Put real secret values in `.env` instead.
+
+Suggested contents:
+
+- deployment hostnames
+- SSH usernames
+- exact deploy commands for your environment
+- post-deploy smoke test notes
+- one-off operational caveats for your server
+
+Example:
+
+```md
+# AGENTS.local.md
+
+## Local Deploy Notes
+
+- Deploy host: `your-server.example.com`
+- Deploy user: `your-user`
+- Smoke test after deploy: send a message through port `465` and check journald plus Gmail Inbox delivery.
+- If the service is already running, use `sudo systemctl restart smtp2cf`.
+```
