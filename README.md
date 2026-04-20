@@ -2,6 +2,8 @@
 
 Small Rust SMTP submission relay for low-RAM VPSes. It accepts authenticated SMTP, durably spools raw MIME messages to disk, and forwards them to [Cloudflare Email Service](https://developers.cloudflare.com/email-service/get-started/send-emails/) using the raw MIME API.
 
+Why this exists: Cloudflare Email Service exposes an HTTP API, but Gmail's "Send mail as" feature expects a normal authenticated SMTP server. `smtp2cf` is the thin bridge between those two worlds. It gives Gmail a standard SMTP submission endpoint on your VPS, then relays the message to Cloudflare without rebuilding the MIME message.
+
 Release history lives in [`CHANGELOG.md`](./CHANGELOG.md).
 
 This project is designed for:
@@ -11,6 +13,8 @@ This project is designed for:
 - one static SMTP username/password
 - Certbot-managed TLS when available
 - low operational complexity
+
+This is primarily an outbound submission relay for Gmail-backed personal or small-domain mail, not a general-purpose mail server.
 
 ## What It Does
 
@@ -22,6 +26,17 @@ This project is designed for:
 - Stores accepted mail on disk before returning `250`
 - Retries Cloudflare delivery on network errors, `429`, and `5xx`
 - Dead-letters permanent failures instead of retrying forever
+
+## Why Gmail
+
+Gmail is the main target because it is a very common "nice UI, bring your own sending server" setup:
+
+- Gmail wants SMTP auth over `465` or `587`
+- Cloudflare gives you an API, not a mailbox-style SMTP submission service
+- preserving raw MIME matters for attachments and headers
+- tiny VPSes benefit from a small always-on relay instead of a full mail stack
+
+So the job of `smtp2cf` is intentionally narrow: be just enough SMTP server for Gmail compatibility, then hand delivery off to Cloudflare.
 
 ## Architecture
 
